@@ -1,0 +1,23 @@
+services:
+  mysql:
+    image: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+
+  zabbix-server:
+    image: zabbix/zabbix-server-mysql
+    environment:
+      DB_SERVER_HOST: mysql
+      MYSQL_USER: root
+      MYSQL_PASSWORD: password
+  
+  zabbix-frontend:
+    image: zabbix/zabbix-web-nginx-mysql
+    environment:
+      DB_SERVER_HOST: mysql
+      MYSQL_USER: root
+      MYSQL_PASSWORD: password
+      ZBX_SERVER_HOST: zabbix-server
+      PHP_TZ: Europe/Warsaw
+    ports:
+      - "80:8080"
