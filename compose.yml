@@ -1,18 +1,18 @@
 services:
   mysql:
-    image: mysql
+    image: mysql:9.0
     environment:
       MYSQL_ROOT_PASSWORD: password
 
   zabbix-server:
-    image: zabbix/zabbix-server-mysql
+    image: zabbix/zabbix-server-mysql:alpine-7.0.0
     environment:
       DB_SERVER_HOST: mysql
       MYSQL_USER: root
       MYSQL_PASSWORD: password
   
   zabbix-frontend:
-    image: zabbix/zabbix-web-nginx-mysql
+    image: zabbix/zabbix-web-nginx-mysql:alpine-7.0.0
     environment:
       DB_SERVER_HOST: mysql
       MYSQL_USER: root
