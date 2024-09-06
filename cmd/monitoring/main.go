@@ -82,7 +82,7 @@ func readRequest(r io.Reader) (*ServerRequest, error) {
 
 	headerProtocol := string(headerBuf[:])
 	if headerProtocol != PROTOCOL {
-		return nil, errors.New(fmt.Sprintf("Unsupported protocol '%s'", PROTOCOL))
+		return nil, errors.New(fmt.Sprintf("Unsupported protocol '%s'", headerProtocol))
 	}
 
 	headerBuf = make([]byte, FLAG_SIZE)
