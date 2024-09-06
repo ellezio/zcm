@@ -7,8 +7,14 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net"
+	"net/http"
+	"net/url"
+	"os"
+	"sync"
+	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -41,7 +47,22 @@ type AgentResponseData struct {
 	Value interface{} `json:"value"`
 }
 
+type MonitoringTargets map[string]MonitoringTarget
+
+type MonitoringTarget struct {
+	Url      string            `yaml:"url"`
+	Interval float32           `yaml:"interval"`
+	FormData map[string]string `yaml:"form-data"`
+}
+
 func main() {
+	mts, err := loadMonitoringTargets()
+	if err != nil {
+		log.Fatalf("Error while loading monitoring targets, err: %s", err)
+	}
+
+	go startMonitoring(*mts)
+
 	l, _ := net.Listen("tcp", "0.0.0.0:10050")
 	fmt.Println("Listening at :10050")
 	for {
@@ -50,13 +71,66 @@ func main() {
 			log.Fatal(err)
 		}
 
-		go newConnection(conn)
+		go newConnection(conn, itemHandler)
 	}
 }
 
-func newConnection(conn net.Conn) {
+func loadMonitoringTargets() (*MonitoringTargets, error) {
+	data, err := os.ReadFile("monitoring-targets.yml")
+	if err != nil {
+		return nil, errors.New(fmt.Sprintf("Error while reading file, err: %s", err))
+	}
+
+	mts := MonitoringTargets{}
+	if err := yaml.Unmarshal(data, &mts); err != nil {
+		return nil, err
+	}
+
+	return &mts, nil
+}
+
+func startMonitoring(targets MonitoringTargets) {
+	var wg sync.WaitGroup
+
+	for name, target := range targets {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			for {
+				values := url.Values{}
+				for k, v := range target.FormData {
+					values.Add(k, v)
+				}
+
+				start := time.Now()
+				res, err := http.PostForm(target.Url, values)
+
+				if err != nil {
+					log.Println(err)
+				} else if res.StatusCode != http.StatusOK {
+					log.Printf("[%s] not 2XX response code, code: %d", name, res.StatusCode)
+				} else {
+					delta := time.Since(start).Milliseconds()
+					fmt.Printf("%d ms\n", delta)
+				}
+
+				time.Sleep(time.Second * time.Duration(target.Interval))
+			}
+		}()
+	}
+
+	wg.Wait()
+}
+
+func itemHandler(key string) interface{} {
+	return 0
+}
+
+func newConnection(conn net.Conn, handler func(key string) interface{}) {
 	rAddr := conn.RemoteAddr()
-	fmt.Println("New Connection ", rAddr)
+	fmt.Println("\nNew Connection", rAddr)
 
 	defer conn.Close()
 	defer fmt.Printf("%s connection closed\n", rAddr)
@@ -68,7 +142,9 @@ func newConnection(conn net.Conn) {
 	}
 	fmt.Printf("[%s] Item key: %s\n", rAddr, req.Data[0].Key)
 
-	if err := sendResponse(rand.Intn(20), conn); err != nil {
+	value := handler(req.Data[0].Key)
+
+	if err := sendResponse(value, conn); err != nil {
 		log.Println(err)
 		return
 	}
