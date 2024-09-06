@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -52,6 +53,7 @@ type MonitoringTargets map[string]MonitoringTarget
 type MonitoringTarget struct {
 	Url      string            `yaml:"url"`
 	Interval float32           `yaml:"interval"`
+	Method   string            `yaml:"method"`
 	FormData map[string]string `yaml:"form-data"`
 }
 
@@ -99,21 +101,56 @@ func startMonitoring(targets MonitoringTargets) {
 			defer wg.Done()
 
 			for {
-				values := url.Values{}
-				for k, v := range target.FormData {
-					values.Add(k, v)
-				}
+				var (
+					res       *http.Response
+					err       error
+					deltaTime time.Duration
+				)
 
-				start := time.Now()
-				res, err := http.PostForm(target.Url, values)
+				if target.Method == http.MethodPost {
+					var (
+						body        io.Reader
+						contentType string
+					)
+
+					if target.FormData != nil {
+						values := url.Values{}
+						for k, v := range target.FormData {
+							values.Add(k, v)
+						}
+						body = bytes.NewBuffer([]byte(values.Encode()))
+						contentType = "application/x-www-form-urlencoded"
+					} else {
+						contentType = "application/json"
+					}
+
+					req, _ := http.NewRequest(
+						target.Method,
+						target.Url,
+						body,
+					)
+					req.Header.Set("Content-Type", contentType+"; charset=utf-8")
+
+					client := http.Client{
+						Timeout: time.Second * 10,
+					}
+
+					start := time.Now()
+					res, err = client.Do(req)
+					deltaTime = time.Since(start)
+				} else if target.Method == http.MethodGet {
+					res, err = http.Get(target.Url)
+				}
 
 				if err != nil {
 					log.Println(err)
-				} else if res.StatusCode != http.StatusOK {
+				} else if res != nil && res.StatusCode != http.StatusOK {
 					log.Printf("[%s] not 2XX response code, code: %d", name, res.StatusCode)
+				} else if res != nil {
+					fmt.Printf("%d ms\n", deltaTime.Milliseconds())
+					res.Body.Close()
 				} else {
-					delta := time.Since(start).Milliseconds()
-					fmt.Printf("%d ms\n", delta)
+					log.Printf("[%s] invalid method \"%s\"", name, target.Method)
 				}
 
 				time.Sleep(time.Second * time.Duration(target.Interval))
