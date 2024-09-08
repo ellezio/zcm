@@ -57,13 +57,22 @@ type MonitoringTarget struct {
 	FormData map[string]string `yaml:"form-data"`
 }
 
+type MonitoringState = sync.Map
+type MonitoringStateData struct {
+	Start             *time.Time
+	LastExecutionTime time.Duration
+	Running           bool
+}
+
 func main() {
+	var mstate MonitoringState
+
 	mts, err := loadMonitoringTargets()
 	if err != nil {
 		log.Fatalf("Error while loading monitoring targets, err: %s", err)
 	}
 
-	go startMonitoring(*mts)
+	go startMonitoring(*mts, &mstate)
 
 	l, _ := net.Listen("tcp", "0.0.0.0:10050")
 	fmt.Println("Listening at :10050")
@@ -73,7 +82,7 @@ func main() {
 			log.Fatal(err)
 		}
 
-		go newConnection(conn, itemHandler)
+		go newConnection(conn, itemHandler(&mstate))
 	}
 }
 
@@ -91,20 +100,21 @@ func loadMonitoringTargets() (*MonitoringTargets, error) {
 	return &mts, nil
 }
 
-func startMonitoring(targets MonitoringTargets) {
+func startMonitoring(targets MonitoringTargets, state *MonitoringState) {
 	var wg sync.WaitGroup
 
 	for name, target := range targets {
+		state.Store(name, MonitoringStateData{})
 		wg.Add(1)
 
-		go func() {
+		go func(key string) {
 			defer wg.Done()
 
 			for {
 				var (
-					res       *http.Response
-					err       error
-					deltaTime time.Duration
+					res *http.Response
+					err error
+					// deltaTime time.Duration
 				)
 
 				if target.Method == http.MethodPost {
@@ -136,10 +146,37 @@ func startMonitoring(targets MonitoringTargets) {
 					}
 
 					start := time.Now()
+
+					if s, ok := state.Load(key); ok {
+						if msd, ok := s.(MonitoringStateData); ok {
+							msd.Start = &start
+							msd.Running = true
+							state.Store(key, msd)
+						}
+					}
+
 					res, err = client.Do(req)
-					deltaTime = time.Since(start)
+					// deltaTime = time.Since(start)
 				} else if target.Method == http.MethodGet {
+					start := time.Now()
+					if s, ok := state.Load(key); ok {
+						if msd, ok := s.(MonitoringStateData); ok {
+							msd.Start = &start
+							msd.Running = true
+							state.Store(key, msd)
+						}
+					}
 					res, err = http.Get(target.Url)
+				}
+
+				if s, ok := state.Load(key); ok {
+					if msd, ok := s.(MonitoringStateData); ok {
+						msd.LastExecutionTime = time.Since(*msd.Start)
+						msd.Start = nil
+						msd.Running = false
+
+						state.Store(key, msd)
+					}
 				}
 
 				if err != nil {
@@ -147,7 +184,7 @@ func startMonitoring(targets MonitoringTargets) {
 				} else if res != nil && res.StatusCode != http.StatusOK {
 					log.Printf("[%s] not 2XX response code, code: %d", name, res.StatusCode)
 				} else if res != nil {
-					fmt.Printf("%d ms\n", deltaTime.Milliseconds())
+					// fmt.Printf("%d ms\n", deltaTime.Milliseconds())
 					res.Body.Close()
 				} else {
 					log.Printf("[%s] invalid method \"%s\"", name, target.Method)
@@ -155,14 +192,27 @@ func startMonitoring(targets MonitoringTargets) {
 
 				time.Sleep(time.Second * time.Duration(target.Interval))
 			}
-		}()
+		}(name)
 	}
 
 	wg.Wait()
 }
 
-func itemHandler(key string) interface{} {
-	return 0
+func itemHandler(state *MonitoringState) func(string) interface{} {
+	return func(key string) interface{} {
+		if s, ok := state.Load(key); ok {
+			if msd, ok := s.(MonitoringStateData); ok {
+				v := msd.LastExecutionTime.Milliseconds()
+				if msd.Running && v < time.Since(*msd.Start).Milliseconds() {
+					v = time.Since(*msd.Start).Milliseconds()
+				}
+				fmt.Printf("read key \"%s\" and get value %dms\n", key, v)
+				return v
+			}
+		}
+
+		return nil
+	}
 }
 
 func newConnection(conn net.Conn, handler func(key string) interface{}) {
