@@ -66,7 +66,7 @@ func ListenAndServe(address string, handler func(itemKey string) interface{}) er
 			if max := 1 * time.Second; tempDelay > max {
 				tempDelay = max
 			}
-			log.Printf("Accept error: %s; retrying in %v", err, tempDelay)
+			log.Printf("zbx; accept error: %s; retrying in %v", err, tempDelay)
 			time.Sleep(tempDelay)
 			continue
 		}
@@ -80,7 +80,7 @@ func handleConn(conn net.Conn, handler func(key string) interface{}) {
 
 	req, err := decode(conn)
 	if err != nil {
-		log.Println(err)
+		log.Printf("zbx; decoding error: %s", err)
 		return
 	}
 
@@ -88,24 +88,24 @@ func handleConn(conn net.Conn, handler func(key string) interface{}) {
 
 	encodedValue, err := encode(value)
 	if err != nil {
-		log.Println(err)
+		log.Printf("zbx; encoding error: %s", err)
 		return
 	}
 
 	if _, err := conn.Write(encodedValue); err != nil {
-		log.Println(err)
+		log.Printf("zbx; response error: %s", err)
 	}
 }
 
 func readHeader(r io.Reader, what string, size uint32) ([]byte, error) {
-	buf := make([]byte, protocolSize)
+	buf := make([]byte, size)
 
 	if n, err := r.Read(buf); err != nil && err != io.EOF {
-		return nil, errors.New(fmt.Sprintf("Error while reading %s; error: %s", what, err))
+		return nil, errors.New(fmt.Sprintf("error while reading %s; error: %s", what, err))
 	} else if uint32(n) < size {
 		return nil, errors.New(
 			fmt.Sprintf(
-				"Error while reading %s, error: %s",
+				"error while reading %s, error: %s",
 				what, io.ErrUnexpectedEOF.Error(),
 			),
 		)
