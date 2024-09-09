@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"go-monitoring/internal/zbx"
+	"github.com/pawellendzion/zcm/internal/zbx"
 	"io"
 	"log"
 	"net/http"
@@ -42,6 +42,7 @@ func main() {
 
 	go startMonitoring(*mts, &mstate)
 
+	log.Println("Listening at :10050")
 	if err := zbx.ListenAndServe("0.0.0.0:10050", itemHandler(&mstate)); err != nil {
 		log.Fatal(err)
 	}
@@ -70,6 +71,10 @@ func startMonitoring(targets monitoringTargets, state *monitoringState) {
 
 		go func(key string) {
 			defer wg.Done()
+
+			client := http.Client{
+				Timeout: time.Second * 10,
+			}
 
 			for {
 				var (
@@ -101,10 +106,6 @@ func startMonitoring(targets monitoringTargets, state *monitoringState) {
 						body,
 					)
 					req.Header.Set("Content-Type", contentType+"; charset=utf-8")
-
-					client := http.Client{
-						Timeout: time.Second * 10,
-					}
 
 					start := time.Now()
 
@@ -141,14 +142,17 @@ func startMonitoring(targets monitoringTargets, state *monitoringState) {
 				}
 
 				if err != nil {
-					log.Println(err)
+					log.Println("request error: ", err)
 				} else if res != nil && res.StatusCode != http.StatusOK {
 					log.Printf("[%s] not 2XX response code, code: %d", name, res.StatusCode)
 				} else if res != nil {
 					// fmt.Printf("%d ms\n", deltaTime.Milliseconds())
-					res.Body.Close()
 				} else {
 					log.Printf("[%s] invalid method \"%s\"", name, target.Method)
+				}
+
+				if err == nil {
+					res.Body.Close()
 				}
 
 				time.Sleep(time.Second * time.Duration(target.Interval))

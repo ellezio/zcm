@@ -1,4 +1,4 @@
-module go-monitoring
+module github.com/pawellendzion/zcm
 
 go 1.22.6
 
