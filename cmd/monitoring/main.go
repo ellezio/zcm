@@ -158,6 +158,7 @@ func startMonitoring(targets monitoringTargets, state *monitoringState) {
 				}
 
 				if reqErr == nil {
+					_, _ = io.ReadAll(res.Body)
 					res.Body.Close()
 				}
 
