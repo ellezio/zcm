@@ -40,9 +40,12 @@ type autorization struct {
 
 type monitoringState = sync.Map
 type monitoringStateData struct {
-	Start             time.Time
-	LastExecutionTime time.Duration
-	Running           bool
+	Start   time.Time
+	Running bool
+
+	LastResponseTime time.Duration
+	LastStatus       string
+	LastStatusCode   int
 }
 
 func main() {
@@ -157,22 +160,24 @@ func startMonitoring(targets monitoringTargets, state *monitoringState) {
 				if s, ok := state.Load(key); ok {
 					if msd, ok := s.(monitoringStateData); ok {
 						deltaTime = time.Since(msd.Start)
-						msd.LastExecutionTime = deltaTime
+						msd.LastResponseTime = deltaTime
 						msd.Running = false
+
+						if res != nil {
+							msd.LastStatus = res.Status
+							msd.LastStatusCode = res.StatusCode
+						} else if reqErr != nil {
+							msd.LastStatus = ""
+							msd.LastStatusCode = 0
+						}
+
 						state.Store(key, msd)
 					}
 				}
 
 				if reqErr != nil {
 					log.Println("request error: ", reqErr)
-				} else if res != nil && res.StatusCode >= 200 && res.StatusCode < 300 {
-					fmt.Printf("%d ms\n", deltaTime.Milliseconds())
 				} else {
-					b, _ := io.ReadAll(res.Body)
-					log.Printf("[%s] not 2XX response code, code: %d, body: %s", name, res.StatusCode, b)
-				}
-
-				if reqErr == nil {
 					_, _ = io.ReadAll(res.Body)
 					res.Body.Close()
 				}
@@ -238,17 +243,45 @@ func isHTTPMethodSupported(method string) bool {
 
 func itemHandler(state *monitoringState) func(string) interface{} {
 	return func(key string) interface{} {
-		if s, ok := state.Load(key); ok {
-			if msd, ok := s.(monitoringStateData); ok {
-				v := msd.LastExecutionTime.Milliseconds()
-				if msd.Running && v < time.Since(msd.Start).Milliseconds() {
-					v = time.Since(msd.Start).Milliseconds()
-				}
-				fmt.Printf("read key \"%s\" and get value %dms\n", key, v)
-				return v
-			}
+		sep := strings.LastIndex(key, ".")
+		if sep == -1 {
+			log.Printf("item key \"%s\" doesn't specify parameter (<item>.<parameter>)", key)
+			return nil
 		}
 
+		item := key[:sep]
+		param := key[sep+1:]
+
+		if s, ok := state.Load(item); ok {
+			if msd, ok := s.(monitoringStateData); ok {
+				var value interface{}
+
+				switch param {
+				case "responseTime":
+					v := msd.LastResponseTime.Milliseconds()
+					if msd.Running && v < time.Since(msd.Start).Milliseconds() {
+						v = time.Since(msd.Start).Milliseconds()
+					}
+					value = v
+
+				case "statusCode":
+					value = msd.LastStatusCode
+
+				case "status":
+					value = msd.LastStatus
+
+				default:
+					log.Printf("item key: %s, unknown parameter: %s", key, param)
+					return nil
+				}
+
+				log.Printf("item key: %s, value: %v", key, value)
+				return value
+			}
+
+		}
+
+		log.Printf("unsupported item key: %s", key)
 		return nil
 	}
 }
