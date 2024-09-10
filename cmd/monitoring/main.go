@@ -2,9 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/pawellendzion/zcm/internal/zbx"
 	"io"
 	"log"
 	"net/http"
@@ -13,16 +13,25 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pawellendzion/zcm/internal/zbx"
+
 	"gopkg.in/yaml.v3"
 )
 
 type monitoringTargets map[string]monitoringTarget
 
 type monitoringTarget struct {
-	Url      string            `yaml:"url"`
-	Interval float32           `yaml:"interval"`
-	Method   string            `yaml:"method"`
-	FormData map[string]string `yaml:"form-data"`
+	Url          string            `yaml:"url"`
+	Autorization autorization      `yaml:"autorization"`
+	Interval     float32           `yaml:"interval"`
+	Method       string            `yaml:"method"`
+	FormData     map[string]string `yaml:"form-data"`
+}
+
+type autorization struct {
+	Type     string
+	Username string
+	Password string
 }
 
 type monitoringState = sync.Map
@@ -107,6 +116,12 @@ func startMonitoring(targets monitoringTargets, state *monitoringState) {
 					req.Header.Set("Content-Type", contentType+"; charset=utf-8")
 				}
 
+				if target.Autorization.Type == "Basic" {
+					auth := target.Autorization.Username + ":" + target.Autorization.Password
+					encodedAuth := base64.StdEncoding.EncodeToString([]byte(auth))
+					req.Header.Set("Authorization", "Basic "+encodedAuth)
+				}
+
 				if s, ok := state.Load(key); ok {
 					if msd, ok := s.(monitoringStateData); ok {
 						msd.Start = time.Now()
@@ -133,7 +148,8 @@ func startMonitoring(targets monitoringTargets, state *monitoringState) {
 				} else if res != nil && res.StatusCode >= 200 && res.StatusCode < 300 {
 					fmt.Printf("%d ms\n", deltaTime.Milliseconds())
 				} else {
-					log.Printf("[%s] not 2XX response code, code: %d", name, res.StatusCode)
+					b, _ := io.ReadAll(res.Body)
+					log.Printf("[%s] not 2XX response code, code: %d, body: %s", name, res.StatusCode, b)
 				}
 
 				if reqErr == nil {
