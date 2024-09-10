@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -51,13 +52,13 @@ type monitoringStateData struct {
 func main() {
 	var mstate monitoringState
 
-	mts, err := loadMonitoringTargets()
+	mts, err := loadMonitoringTargets("monitoring-targets.yml")
 	if err != nil {
-		log.Fatalf("Error while loading monitoring targets, err: %s", err)
+		log.Fatalf("Error while loading monitoring targets, error: %s", err)
 	}
 
 	if err := checkAndPrepareTargets(mts); err != nil {
-		log.Fatal("Error while parsing target ", err)
+		log.Fatal(err)
 	}
 
 	go startMonitoring(*mts, &mstate)
@@ -74,10 +75,10 @@ func main() {
 	}
 }
 
-func loadMonitoringTargets() (*monitoringTargets, error) {
-	data, err := os.ReadFile("monitoring-targets.yml")
+func loadMonitoringTargets(path string) (*monitoringTargets, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Error while reading file, err: %s", err))
+		return nil, errors.New(fmt.Sprintf("Error while reading file, error: %s", err))
 	}
 
 	mts := monitoringTargets{}
@@ -119,9 +120,7 @@ func startMonitoring(targets monitoringTargets, state *monitoringState) {
 						body = bytes.NewBuffer([]byte(values.Encode()))
 					} else if target.Json != "" {
 						contentType = "application/json"
-						buf := &bytes.Buffer{}
-						_ = json.Compact(buf, []byte(target.Json))
-						body = buf
+						body = bytes.NewBufferString(target.Json)
 					}
 
 				}
@@ -217,6 +216,14 @@ func checkAndPrepareTargets(targets *monitoringTargets) error {
 			if v.Json != "" && v.FormData != nil {
 				return errors.New(fmt.Sprintf("%s: field \"json\" and \"form-data\" cannot be filled together", k))
 			}
+
+			if v.Json != "" {
+				buf := &bytes.Buffer{}
+				if err := json.Compact(buf, []byte(v.Json)); err != nil {
+					return errors.New(fmt.Sprintf("%s: error while parsing json data, error: %s", k, err))
+				}
+				v.Json = buf.String()
+			}
 		}
 
 		if v.Autorization != (autorization{}) {
@@ -232,6 +239,26 @@ func checkAndPrepareTargets(targets *monitoringTargets) error {
 				return errors.New(fmt.Sprintf("%s: token or username and password is required for autorization", k))
 			}
 		}
+
+		if err := replaceWithEnvVar(&v.Url); err != nil {
+			return err
+		}
+
+		if err := replaceWithEnvVar(&v.Autorization.Token); err != nil {
+			return err
+		}
+
+		if err := replaceWithEnvVar(&v.Autorization.Password); err != nil {
+			return err
+		}
+
+		if err := replaceWithEnvVar(&v.Autorization.Username); err != nil {
+			return err
+		}
+
+		if err := replaceWithEnvVar(&v.Autorization.Type); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -239,6 +266,20 @@ func checkAndPrepareTargets(targets *monitoringTargets) error {
 
 func isHTTPMethodSupported(method string) bool {
 	return method == http.MethodGet || method == http.MethodPost
+}
+
+func replaceWithEnvVar(value *string) error {
+	reg := regexp.MustCompile("{env:([a-zA-Z_]{1}[a-zA-Z_0-9]*)}")
+	matches := reg.FindAllStringSubmatch(*value, -1)
+	for _, matched := range matches {
+		envVal := os.Getenv(matched[1])
+		if envVal == "" {
+			return errors.New(fmt.Sprintf("environment variable %s is not present", matched[1]))
+		}
+		*value = strings.ReplaceAll(*value, matched[0], envVal)
+	}
+
+	return nil
 }
 
 func itemHandler(state *monitoringState) func(string) interface{} {
