@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -26,6 +27,7 @@ type monitoringTarget struct {
 	Interval     float32           `yaml:"interval"`
 	Method       string            `yaml:"method"`
 	FormData     map[string]string `yaml:"form-data"`
+	Json         string            `yaml:"json"`
 }
 
 type autorization struct {
@@ -100,8 +102,11 @@ func startMonitoring(targets monitoringTargets, state *monitoringState) {
 							values.Add(k, v)
 						}
 						body = bytes.NewBuffer([]byte(values.Encode()))
-					} else {
+					} else if target.Json != "" {
 						contentType = "application/json"
+						buf := &bytes.Buffer{}
+						_ = json.Compact(buf, []byte(target.Json))
+						body = buf
 					}
 
 				}
