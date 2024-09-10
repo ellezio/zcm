@@ -1,4 +1,4 @@
-module github.com/pawellendzion/zcm
+module github.com/ellezio/zcm
 
 go 1.22.6
 

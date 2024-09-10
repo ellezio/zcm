@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pawellendzion/zcm/internal/zbx"
+	"github.com/ellezio/zcm/internal/zbx"
 
 	"gopkg.in/yaml.v3"
 )
