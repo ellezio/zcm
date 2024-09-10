@@ -1,0 +1,11 @@
+services:
+  zcm:
+    build: 
+      dockerfile: ./Dockerfile
+      target: release
+    ports:
+      - "10050:10050"
+    environment:
+      ZCM_PORT: 10050
+    volumes:
+      - ./monitoring-targets.yml:/monitoring-targets.yml
