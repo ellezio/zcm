@@ -21,3 +21,19 @@ COPY --from=golang /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 EXPOSE 10050
 
 ENTRYPOINT ["/monitoring"]
+
+FROM golang:1.22.6 AS develop-stage
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY monitoring-targets.yml ./
+COPY ./cmd ./cmd
+COPY ./internal ./internal
+
+EXPOSE 10050
+
+ENV CGO_ENABLED=0
+ENTRYPOINT ["go", "run", "./cmd/monitoring"]

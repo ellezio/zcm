@@ -27,7 +27,7 @@ type monitoringTarget struct {
 
 type monitoringState = sync.Map
 type monitoringStateData struct {
-	Start             *time.Time
+	Start             time.Time
 	LastExecutionTime time.Duration
 	Running           bool
 }
@@ -78,80 +78,65 @@ func startMonitoring(targets monitoringTargets, state *monitoringState) {
 
 			for {
 				var (
-					res *http.Response
-					err error
-					// deltaTime time.Duration
+					body        io.Reader
+					contentType string
 				)
 
 				if target.Method == http.MethodPost {
-					var (
-						body        io.Reader
-						contentType string
-					)
-
 					if target.FormData != nil {
+						contentType = "application/x-www-form-urlencoded"
+
 						values := url.Values{}
 						for k, v := range target.FormData {
 							values.Add(k, v)
 						}
 						body = bytes.NewBuffer([]byte(values.Encode()))
-						contentType = "application/x-www-form-urlencoded"
 					} else {
 						contentType = "application/json"
 					}
 
-					req, _ := http.NewRequest(
-						target.Method,
-						target.Url,
-						body,
-					)
+				}
+
+				req, _ := http.NewRequest(
+					target.Method,
+					target.Url,
+					body,
+				)
+
+				if contentType != "" {
 					req.Header.Set("Content-Type", contentType+"; charset=utf-8")
-
-					start := time.Now()
-
-					if s, ok := state.Load(key); ok {
-						if msd, ok := s.(monitoringStateData); ok {
-							msd.Start = &start
-							msd.Running = true
-							state.Store(key, msd)
-						}
-					}
-
-					res, err = client.Do(req)
-					// deltaTime = time.Since(start)
-				} else if target.Method == http.MethodGet {
-					start := time.Now()
-					if s, ok := state.Load(key); ok {
-						if msd, ok := s.(monitoringStateData); ok {
-							msd.Start = &start
-							msd.Running = true
-							state.Store(key, msd)
-						}
-					}
-					res, err = http.Get(target.Url)
 				}
 
 				if s, ok := state.Load(key); ok {
 					if msd, ok := s.(monitoringStateData); ok {
-						msd.LastExecutionTime = time.Since(*msd.Start)
-						msd.Start = nil
-						msd.Running = false
-
+						msd.Start = time.Now()
+						msd.Running = true
 						state.Store(key, msd)
 					}
 				}
 
-				if err != nil {
-					log.Println("request error: ", err)
-				} else if res != nil && res.StatusCode != http.StatusOK {
-					log.Printf("[%s] not 2XX response code, code: %d", name, res.StatusCode)
-				} else if res != nil {
-					// fmt.Printf("%d ms\n", deltaTime.Milliseconds())
-				} else {
-					log.Printf("[%s] invalid method \"%s\"", name, target.Method)
+				res, reqErr := client.Do(req)
+
+				var deltaTime time.Duration
+
+				if s, ok := state.Load(key); ok {
+					if msd, ok := s.(monitoringStateData); ok {
+						deltaTime = time.Since(msd.Start)
+						msd.LastExecutionTime = deltaTime
+						msd.Running = false
+						state.Store(key, msd)
+					}
 				}
 
-				if err == nil {
+				if reqErr != nil {
+					log.Println("request error: ", reqErr)
+				} else if res != nil && res.StatusCode >= 200 && res.StatusCode < 300 {
+					fmt.Printf("%d ms\n", deltaTime.Milliseconds())
+				} else {
+					log.Printf("[%s] not 2XX response code, code: %d", name, res.StatusCode)
+				}
+
+				if reqErr == nil {
 					res.Body.Close()
 				}
 
@@ -168,8 +153,8 @@ func itemHandler(state *monitoringState) func(string) interface{} {
 		if s, ok := state.Load(key); ok {
 			if msd, ok := s.(monitoringStateData); ok {
 				v := msd.LastExecutionTime.Milliseconds()
-				if msd.Running && v < time.Since(*msd.Start).Milliseconds() {
-					v = time.Since(*msd.Start).Milliseconds()
+				if msd.Running && v < time.Since(msd.Start).Milliseconds() {
+					v = time.Since(msd.Start).Milliseconds()
 				}
 				fmt.Printf("read key \"%s\" and get value %dms\n", key, v)
 				return v
