@@ -59,8 +59,14 @@ func main() {
 
 	go startMonitoring(*mts, &mstate)
 
-	log.Println("Listening at :10050")
-	if err := zbx.ListenAndServe("0.0.0.0:10050", itemHandler(&mstate)); err != nil {
+	port := os.Getenv("ZCM_PORT")
+	if port == "" {
+		port = "10050"
+	}
+
+	address := fmt.Sprintf("0.0.0.0:%s", port)
+	log.Println("Listening at", address)
+	if err := zbx.ListenAndServe(address, itemHandler(&mstate)); err != nil {
 		log.Fatal(err)
 	}
 }
