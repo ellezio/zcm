@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,6 +35,7 @@ type autorization struct {
 	Type     string
 	Username string
 	Password string
+	Token    string
 }
 
 type monitoringState = sync.Map
@@ -49,6 +51,10 @@ func main() {
 	mts, err := loadMonitoringTargets()
 	if err != nil {
 		log.Fatalf("Error while loading monitoring targets, err: %s", err)
+	}
+
+	if err := prepareTargets(mts); err != nil {
+		log.Fatal("Error while parsing target ", err)
 	}
 
 	go startMonitoring(*mts, &mstate)
@@ -84,7 +90,7 @@ func startMonitoring(targets monitoringTargets, state *monitoringState) {
 			defer wg.Done()
 
 			client := http.Client{
-				Timeout: time.Second * 10,
+				Timeout: time.Minute * 10,
 			}
 
 			for {
@@ -121,10 +127,13 @@ func startMonitoring(targets monitoringTargets, state *monitoringState) {
 					req.Header.Set("Content-Type", contentType+"; charset=utf-8")
 				}
 
-				if target.Autorization.Type == "Basic" {
-					auth := target.Autorization.Username + ":" + target.Autorization.Password
-					encodedAuth := base64.StdEncoding.EncodeToString([]byte(auth))
-					req.Header.Set("Authorization", "Basic "+encodedAuth)
+				if target.Autorization.Type != "" {
+					token := target.Autorization.Token
+					if token == "" {
+						auth := target.Autorization.Username + ":" + target.Autorization.Password
+						token = base64.StdEncoding.EncodeToString([]byte(auth))
+					}
+					req.Header.Set("Authorization", target.Autorization.Type+" "+token)
 				}
 
 				if s, ok := state.Load(key); ok {
@@ -168,6 +177,58 @@ func startMonitoring(targets monitoringTargets, state *monitoringState) {
 	}
 
 	wg.Wait()
+}
+
+func prepareTargets(targets *monitoringTargets) error {
+	for k, v := range *targets {
+		if v.Url == "" {
+			return errors.New(fmt.Sprintf("%s: field url not specifaied", k))
+		}
+
+		if v.Method == "" {
+			v.Method = http.MethodGet
+		} else {
+			v.Method = strings.ToUpper(v.Method)
+			if !isHTTPMethodSupported(v.Method) {
+				return errors.New(fmt.Sprintf("%s: http method %s not supported", k, v.Method))
+			}
+		}
+
+		if v.Method == http.MethodPost {
+			if v.Json == "" && v.FormData == nil {
+				return errors.New(fmt.Sprintf("%s: when http method is POST field \"json\" or \"form-data\" is required", k))
+			}
+
+			if v.Json != "" && v.FormData != nil {
+				return errors.New(fmt.Sprintf("%s: field \"json\" and \"form-data\" cannot be filled together", k))
+			}
+		}
+
+		fmt.Println(v.Interval)
+		if v.Interval == 0.0 {
+			v.Interval = 10
+		}
+
+		if v.Autorization != (autorization{}) {
+			if v.Autorization.Type == "" {
+				return errors.New(fmt.Sprintf("%s: field \"type\" is required for autorization", k))
+			}
+
+			if v.Autorization.Token != "" && (v.Autorization.Username != "" || v.Autorization.Password != "") {
+				return errors.New(fmt.Sprintf("%s: \"token\" cannot be filled along with \"username\" and \"password\"", k))
+			}
+
+			if v.Autorization.Token == "" && (v.Autorization.Username == "" || v.Autorization.Password == "") {
+				return errors.New(fmt.Sprintf("%s: token or username and password is required for autorization", k))
+			}
+		}
+	}
+
+	return nil
+}
+
+func isHTTPMethodSupported(method string) bool {
+	return method == http.MethodGet || method == http.MethodPost
 }
 
 func itemHandler(state *monitoringState) func(string) interface{} {
