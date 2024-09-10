@@ -20,12 +20,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type monitoringTargets map[string]monitoringTarget
+type monitoringTargets map[string]*monitoringTarget
 
 type monitoringTarget struct {
 	Url          string            `yaml:"url"`
 	Autorization autorization      `yaml:"autorization"`
-	Interval     float32           `yaml:"interval"`
+	Interval     int               `yaml:"interval"`
 	Method       string            `yaml:"method"`
 	FormData     map[string]string `yaml:"form-data"`
 	Json         string            `yaml:"json"`
@@ -53,7 +53,7 @@ func main() {
 		log.Fatalf("Error while loading monitoring targets, err: %s", err)
 	}
 
-	if err := prepareTargets(mts); err != nil {
+	if err := checkAndPrepareTargets(mts); err != nil {
 		log.Fatal("Error while parsing target ", err)
 	}
 
@@ -171,7 +171,7 @@ func startMonitoring(targets monitoringTargets, state *monitoringState) {
 					res.Body.Close()
 				}
 
-				time.Sleep(time.Second * time.Duration(target.Interval))
+				time.Sleep(time.Millisecond * time.Duration(target.Interval))
 			}
 		}(name)
 	}
@@ -179,8 +179,12 @@ func startMonitoring(targets monitoringTargets, state *monitoringState) {
 	wg.Wait()
 }
 
-func prepareTargets(targets *monitoringTargets) error {
+func checkAndPrepareTargets(targets *monitoringTargets) error {
 	for k, v := range *targets {
+		if v.Interval == 0 {
+			v.Interval = 10000
+		}
+
 		if v.Url == "" {
 			return errors.New(fmt.Sprintf("%s: field url not specifaied", k))
 		}
@@ -202,11 +206,6 @@ func prepareTargets(targets *monitoringTargets) error {
 			if v.Json != "" && v.FormData != nil {
 				return errors.New(fmt.Sprintf("%s: field \"json\" and \"form-data\" cannot be filled together", k))
 			}
-		}
-
-		fmt.Println(v.Interval)
-		if v.Interval == 0.0 {
-			v.Interval = 10
 		}
 
 		if v.Autorization != (autorization{}) {
