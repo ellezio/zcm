@@ -7,7 +7,7 @@ RUN go mod download
 
 COPY ./cmd ./cmd
 COPY ./internal ./internal
-RUN CGO_ENABLED=0 GOOS=linux go build -o /monitoring ./cmd/monitoring
+RUN CGO_ENABLED=0 go build -o /monitoring ./cmd/monitoring
 
 FROM scratch AS build-release-stage
 
