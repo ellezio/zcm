@@ -33,10 +33,10 @@ type monitoringTarget struct {
 }
 
 type autorization struct {
-	Type     string
-	Username string
-	Password string
-	Token    string
+	Type     string `yaml:"type"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+	Token    string `yaml:"token"`
 }
 
 type monitoringState = sync.Map
