@@ -53,7 +53,7 @@ some-name: # zabbix collects data by this name + param (responseTime, status, st
     key: val
 ```
 
-For url and all autorization fields getting data from environment variable is supported
+For url and all authorization fields getting data from environment variable is supported
 ```yaml
 # ...
 url: http://{env:IP}:{env:PORT}
