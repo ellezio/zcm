@@ -24,15 +24,15 @@ import (
 type monitoringTargets map[string]*monitoringTarget
 
 type monitoringTarget struct {
-	Url          string            `yaml:"url"`
-	Autorization autorization      `yaml:"autorization"`
-	Interval     int               `yaml:"interval"`
-	Method       string            `yaml:"method"`
-	FormData     map[string]string `yaml:"form-data"`
-	Json         string            `yaml:"json"`
+	Url           string            `yaml:"url"`
+	Authorization authorization     `yaml:"authorization"`
+	Interval      int               `yaml:"interval"`
+	Method        string            `yaml:"method"`
+	FormData      map[string]string `yaml:"form-data"`
+	Json          string            `yaml:"json"`
 }
 
-type autorization struct {
+type authorization struct {
 	Type     string `yaml:"type"`
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
@@ -135,13 +135,13 @@ func startMonitoring(targets monitoringTargets, state *monitoringState) {
 					req.Header.Set("Content-Type", contentType+"; charset=utf-8")
 				}
 
-				if target.Autorization.Type != "" {
-					token := target.Autorization.Token
+				if target.Authorization.Type != "" {
+					token := target.Authorization.Token
 					if token == "" {
-						auth := target.Autorization.Username + ":" + target.Autorization.Password
+						auth := target.Authorization.Username + ":" + target.Authorization.Password
 						token = base64.StdEncoding.EncodeToString([]byte(auth))
 					}
-					req.Header.Set("Authorization", target.Autorization.Type+" "+token)
+					req.Header.Set("Authorization", target.Authorization.Type+" "+token)
 				}
 
 				if s, ok := state.Load(key); ok {
@@ -226,17 +226,17 @@ func checkAndPrepareTargets(targets *monitoringTargets) error {
 			}
 		}
 
-		if v.Autorization != (autorization{}) {
-			if v.Autorization.Type == "" {
-				return errors.New(fmt.Sprintf("%s: field \"type\" is required for autorization", k))
+		if v.Authorization != (authorization{}) {
+			if v.Authorization.Type == "" {
+				return errors.New(fmt.Sprintf("%s: field \"type\" is required for authorization", k))
 			}
 
-			if v.Autorization.Token != "" && (v.Autorization.Username != "" || v.Autorization.Password != "") {
+			if v.Authorization.Token != "" && (v.Authorization.Username != "" || v.Authorization.Password != "") {
 				return errors.New(fmt.Sprintf("%s: \"token\" cannot be filled along with \"username\" and \"password\"", k))
 			}
 
-			if v.Autorization.Token == "" && (v.Autorization.Username == "" || v.Autorization.Password == "") {
-				return errors.New(fmt.Sprintf("%s: token or username and password is required for autorization", k))
+			if v.Authorization.Token == "" && (v.Authorization.Username == "" || v.Authorization.Password == "") {
+				return errors.New(fmt.Sprintf("%s: token or username and password is required for authorization", k))
 			}
 		}
 
@@ -244,19 +244,19 @@ func checkAndPrepareTargets(targets *monitoringTargets) error {
 			return err
 		}
 
-		if err := replaceWithEnvVar(&v.Autorization.Token); err != nil {
+		if err := replaceWithEnvVar(&v.Authorization.Token); err != nil {
 			return err
 		}
 
-		if err := replaceWithEnvVar(&v.Autorization.Password); err != nil {
+		if err := replaceWithEnvVar(&v.Authorization.Password); err != nil {
 			return err
 		}
 
-		if err := replaceWithEnvVar(&v.Autorization.Username); err != nil {
+		if err := replaceWithEnvVar(&v.Authorization.Username); err != nil {
 			return err
 		}
 
-		if err := replaceWithEnvVar(&v.Autorization.Type); err != nil {
+		if err := replaceWithEnvVar(&v.Authorization.Type); err != nil {
 			return err
 		}
 	}
