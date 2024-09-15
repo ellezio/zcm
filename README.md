@@ -5,9 +5,6 @@ ZCM (Zabbix connection monitoring) is an agent which sends requests on provided 
 There is a when using docker image of ZCM with version 0.1.0 in **monitoring-targets.yml** file structure
 there is field called **autorization** instead of **authorization**, *h* is missing
 
-## TODO
-- [ ] todo
-
 ## Download
 - Pull image from **[DockerHub](https://hub.docker.com/r/ellezio/zcm)** and run with **[monitoring targets](#monitoring-targets)** file
 ```
@@ -36,7 +33,7 @@ go build -o zcm ./cmd/zcm
 ## Monitoring targets
 Structure of monitoring-targets.yml file
 ```yaml
-some-name: # zabbix collects data by this name + param (responseTime, status, statusCode)
+some-name: # zabbix collects data by this name + parameter
   url: http://some-url.some
   method: POST # optional; default GET, available: POST or GET
   interval: 10000 # optional; default 10000 in milliseconds
@@ -64,3 +61,9 @@ authorization:
     token: "{env:AUTH_TOKEN}"
 # ...
 ```
+
+## Target's parameters
+To get specific data from item append to item key a "." with one of parameters.
+- `responseTime` - last response time or if currently executing request is pending longer than last response time, get it's value
+- `statusCode` - integer representing last response status code
+- `status` - code + description e.g. *200 OK*
