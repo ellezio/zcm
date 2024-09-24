@@ -1,3 +1,2 @@
-- [ ] add `--config` option to specify monitoring targets
 - [ ] add `imports` to yaml to simplify targets managment
 - [ ] add `{secret:...}` in yaml

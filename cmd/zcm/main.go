@@ -12,7 +12,12 @@ import (
 )
 
 func main() {
-	targets, err := monitoring.LoadTargets("monitoring-targets.yml")
+	cli, err := parseCLIArgs(os.Args)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	targets, err := monitoring.LoadTargets(cli.targetsFile)
 	if err != nil {
 		log.Fatal(err)
 	}

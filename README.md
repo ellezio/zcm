@@ -1,11 +1,7 @@
 # Zabbix connection monitoring agent
 ZCM (Zabbix connection monitoring) is an agent which sends requests on provided endpoints with authorization and data (`json` or `encoded form data`) if `POST` method choosen. Zabbix server/proxy (veriosn 7.0 and higher) can collect data like **response time**, **status** and **status code**.
 
-## Notice
-There is a when using docker image of ZCM with version 0.1.0 in **monitoring-targets.yml** file structure
-there is field called **autorization** instead of **authorization**, *h* is missing
-
-## Download
+## Quickstart
 - Pull image from **[DockerHub](https://hub.docker.com/r/ellezio/zcm)** and run with **[monitoring targets](#monitoring-targets)** file
 ```
 docker run \
@@ -29,6 +25,9 @@ docker run \
 ```
 go build -o zcm ./cmd/zcm
 ```
+
+## Available cli arguments
+- --targets-file (short -t) *<[monitoring-targets](#monitoring-targets)-file-path>*
 
 ## Monitoring targets
 Structure of monitoring-targets.yml file
